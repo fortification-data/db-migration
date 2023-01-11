@@ -3,13 +3,14 @@ from __future__ import annotations
 import csv
 import os
 from pathlib import Path
+import shutil
 import sys
 from typing import Any
 
 from dotenv import load_dotenv
 from redcap import Project
 from rich.progress import Progress
-from utilities import console
+from db_migration.utilities import console
 
 
 def download_data() -> None:
@@ -33,10 +34,15 @@ def download_data() -> None:
         sys.exit(1)
 
     out_dir = Path().cwd() / "data" / "redcap"
+
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     with Progress(transient=True) as progress:
-        task1 = progress.add_task("Downloading RedCAP data into `data/redcap` folder...", total=len(tables))
+        task1 = progress.add_task(
+            "Downloading RedCAP data into `data/redcap` folder...", total=len(tables)
+        )
         for table in tables:
             # Here we use the defaults mostly
             # Except we specify `df` format
