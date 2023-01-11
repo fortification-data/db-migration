@@ -1,43 +1,60 @@
+from __future__ import annotations
+
+import csv
+import os
 from pathlib import Path
 import sys
+from typing import Any
 
-import pandas as pd
-import polars as pl
+from dotenv import load_dotenv
 from redcap import Project
 from rich.progress import Progress
+from utilities import console
 
-from db_migration.utilities import console
 
-
-def download_data(api_key: str, folder: Path) -> None:
+def download_data() -> None:
+    load_dotenv()
     # This is the part that uses PyCap to download the data
     # The package is unstable and this is an outdated version
     # because it was the only way to use the `project.forms` attribute.
     url = "https://redcap.emory.edu/api/"
+    api_key = os.environ.get("REDCAP_API_KEY")
+    if api_key is None:
+        console.log("[red]REDCAP_API_KEY[/red] environment variable not set.")
+        sys.exit(1)
     project = Project(url=url, token=api_key)
-    tables = project.forms
+
+    tables: tuple[str] | None = project.forms
     if tables is None:
-        console.print("[red]No data found in the GFDx RedCAP project[/red]")
-        console.print(
+        console.log("[red]No data found in the GFDx RedCAP project[/red]")
+        console.log(
             "[red]Please check your API key or consult the database admin[/red]"
         )
         sys.exit(1)
 
-    table_names = [str(t) for t in tables]
+    out_dir = Path("data") / "redcap"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     with Progress(transient=True) as progress:
-        task1 = progress.add_task("Downloading RedCAP data...", total=len(table_names))
-        for table in table_names:
+        task1 = progress.add_task("Downloading RedCAP data into `data/redcap` folder...", total=len(tables))
+        for table in tables:
             # Here we use the defaults mostly
             # Except we specify `df` format
-            df: pd.DataFrame = project.export_records(  # type: ignore (sus placement)
-                forms=[table],
-                format="df",
-            )
-            progress.console.print(f"[cyan]Downloaded {table} data[/cyan]")
-            pl.from_pandas(df).write_csv(folder / f"{table}.csv")
-            progress.console.print(f"[green]Saved {table} to disk[/green]")
+            data: list[dict[str, Any]] = project.export_records(forms=[table])
+            if len(data) == 0:
+                progress.console.log(f"[red]No data found in {table}[/red]")
+                continue
+
+            with open(out_dir / f"{table}.csv", "w") as f:
+                csvwriter = csv.DictWriter(f, fieldnames=data[0].keys())
+                csvwriter.writeheader()
+                csvwriter.writerows(data)
+
+            progress.console.log(f"[green]Saved `{table}` to disk[/green]")
             progress.advance(task1)
 
-    console.print("[green]Done downloading data[/green]")
-    return
+    console.log("[green]Done![/green]")
+
+
+if __name__ == "__main__":
+    download_data()
