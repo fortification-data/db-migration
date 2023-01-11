@@ -32,7 +32,7 @@ def download_data() -> None:
         )
         sys.exit(1)
 
-    out_dir = Path("data") / "redcap"
+    out_dir = Path().cwd() / "data" / "redcap"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     with Progress(transient=True) as progress:
